@@ -1,0 +1,84 @@
+name: "Tag Version From POM"
+description: "Compare and tag version from Maven pom.xml"
+author: "Lucas"
+
+inputs:
+  git-user-name:
+    description: "Git user name"
+    required: false
+    default: "ci-bot"
+
+  git-user-email:
+    description: "Git user email"
+    required: false
+    default: "ci@bot.local"
+
+  default-tag:
+    description: "Default tag if none exists"
+    required: false
+    default: "0.0.1"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Configure Git
+      shell: bash
+      run: |
+        git config user.name "${{ inputs.git-user-name }}"
+        git config user.email "${{ inputs.git-user-email }}"
+
+    - name: Fetch Git tags
+      shell: bash
+      run: git fetch --tags
+
+    - name: Get latest Git tag
+      id: get-latest-tag
+      shell: bash
+      run: |
+        TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "${{ inputs.default-tag }}")
+        echo "Latest tag: $TAG"
+        echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+    - name: Get version from pom.xml
+      id: get-pom-version
+      shell: bash
+      run: |
+        POM_VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+        echo "POM version: $POM_VERSION"
+        echo "pom=$POM_VERSION" >> $GITHUB_OUTPUT
+
+    - name: Compare and determine next version
+      id: compute-version
+      shell: bash
+      run: |
+        TAG_VERSION="${{ steps.get-latest-tag.outputs.tag }}"
+        POM_VERSION="${{ steps.get-pom-version.outputs.pom }}"
+
+        if [ "$POM_VERSION" \> "$TAG_VERSION" ]; then
+          echo "Using version from POM: $POM_VERSION"
+          echo "next=$POM_VERSION" >> $GITHUB_OUTPUT
+          echo "update-pom=false" >> $GITHUB_OUTPUT
+        else
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$TAG_VERSION"
+          PATCH=$((PATCH + 1))
+          NEXT_VERSION="$MAJOR.$MINOR.$PATCH"
+          echo "Bumping version to: $NEXT_VERSION"
+          echo "next=$NEXT_VERSION" >> $GITHUB_OUTPUT
+          echo "update-pom=true" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Update pom.xml version
+      if: steps.compute-version.outputs.update-pom == 'true'
+      shell: bash
+      run: |
+        mvn versions:set -DnewVersion=${{ steps.compute-version.outputs.next }} -DgenerateBackupPoms=false
+        git add pom.xml
+        git commit -m "chore: bump version to ${{ steps.compute-version.outputs.next }}"
+
+    - name: Create and push Git tag
+      shell: bash
+      run: |
+        VERSION=${{ steps.compute-version.outputs.next }}
+        git tag "$VERSION"
+        git push origin "$VERSION"
+        git push
