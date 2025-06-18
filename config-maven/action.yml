@@ -1,0 +1,43 @@
+name: "Config Maven"
+description: "Configure Maven settings and cache dependencies"
+author: "Lucas"
+
+inputs:
+  maven-server-id:
+    description: "Maven Server ID"
+    required: true
+  maven-server-username:
+    description: "Maven Server Username"
+    required: true
+  maven-server-password:
+    description: "Maven Server Password"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - uses: seepine/hash-files@v1
+      id: get-hash
+      with:
+        patterns: |-
+          pom.xml
+
+    - name: Cache Maven repository
+      uses: actions/cache@v4
+      with:
+        path: ~/.m2/repository
+        key: maven-${{ runner.os }}-${{ steps.get-hash.outputs.hash }}
+        restore-keys: |
+          maven-${{ runner.os }}-
+
+    - name: Configure Maven Settings
+      uses: s4u/maven-settings-action@v3.1.0
+      with:
+        servers: |
+          [
+            {
+              "id": "${{ inputs.maven-server-id }}",
+              "username": "${{ inputs.maven-server-username }}",
+              "password": "${{ inputs.maven-server-password }}"
+            }
+          ]
