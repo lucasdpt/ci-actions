@@ -33,9 +33,9 @@ runs:
         if [[ "${{ inputs.cache-key-mode }}" == "repo" ]]; then
           echo "Using repository name for cache key"
           echo "key=maven-${{ runner.os }}-${{ github.repository }}" >> $GITHUB_OUTPUT
+          echo 
         else
           echo "Using hash of pom.xml for cache key"
-          HASH=$(curl -sL https://raw.githubusercontent.com/seepine/hash-files/v1/entrypoint.sh | bash -s pom.xml)
           echo "key=maven-${{ runner.os }}-${{ steps.get-hash.outputs.hash }}" >> $GITHUB_OUTPUT
         fi
 
@@ -43,7 +43,7 @@ runs:
       uses: actions/cache@v4
       with:
         path: ~/.m2/repository
-        key: maven-${{ runner.os }}-${{ steps.cache-key.outputs.key }}
+        key: ${{ steps.cache-key.outputs.key }}
         restore-keys: |
           maven-${{ runner.os }}-
 
